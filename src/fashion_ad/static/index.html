@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Atelier Watch — Fashion Anomaly Detection</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
+<style>
+:root {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --surface-2: #222220; --border: rgba(255,255,255,.10);
+  --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781; --grid: #2c2c2a; --axis: #383835;
+  --series: #3987e5; --accent: #d55181;
+  --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--page); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; display: flex; }
+h1, h2, h3, p { margin: 0; }
+button, select, input { font: inherit; color: inherit; }
+
+/* ---- shell ---- */
+aside { width: 232px; flex: none; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 20px 14px; position: sticky; top: 0; height: 100vh; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 0 8px 22px; }
+.brand-mark { width: 34px; height: 34px; border-radius: 9px; background: var(--accent); display: grid; place-items: center; font-weight: 700; color: #fff; letter-spacing: .5px; }
+.brand b { display: block; font-size: 15px; }
+.brand span { color: var(--muted); font-size: 12px; }
+nav { display: flex; flex-direction: column; gap: 2px; }
+nav a { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; color: var(--ink-2); text-decoration: none; }
+nav a:hover { background: var(--surface-2); }
+nav a.active { background: var(--surface-2); color: var(--ink); box-shadow: inset 2px 0 0 var(--accent); }
+nav svg { width: 17px; height: 17px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.run-box { margin-top: auto; border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+.run-box small { color: var(--muted); display: block; margin-bottom: 2px; }
+.btn { width: 100%; margin-top: 10px; padding: 9px 12px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; font-weight: 600; cursor: pointer; }
+.btn:hover { filter: brightness(1.1); }
+.btn:focus-visible, nav a:focus-visible, select:focus-visible, input:focus-visible, tr:focus-visible { outline: 2px solid var(--series); outline-offset: 2px; }
+.btn[disabled] { opacity: .6; cursor: progress; }
+main { flex: 1; min-width: 0; padding: 26px 30px 48px; }
+header.page { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+header.page h1 { font-size: 22px; font-weight: 650; }
+header.page p { color: var(--muted); margin-top: 2px; }
+.range { color: var(--ink-2); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font-size: 13px; white-space: nowrap; }
+
+/* ---- building blocks ---- */
+.grid { display: grid; gap: 14px; }
+.cols-5 { grid-template-columns: repeat(5, 1fr); } .cols-4 { grid-template-columns: repeat(4, 1fr); }
+.cols-3 { grid-template-columns: repeat(3, 1fr); align-items: start; } .cols-2 { grid-template-columns: repeat(2, 1fr); }
+.split { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); align-items: start; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; min-width: 0; }
+.card h3 { font-size: 13px; font-weight: 600; color: var(--ink-2); margin-bottom: 10px; }
+.card h3 small { color: var(--muted); font-weight: 400; margin-left: 6px; }
+.stack > * + * { margin-top: 14px; }
+.tile .label { color: var(--muted); font-size: 12.5px; }
+.tile .value { font-size: 28px; font-weight: 650; margin: 4px 0 2px; letter-spacing: -.3px; }
+.tile .sub { color: var(--ink-2); font-size: 12.5px; }
+.chart { width: 100%; height: 300px; }
+.chart.sm { height: 210px; }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; color: var(--ink-2); font-size: 12.5px; margin-bottom: 4px; }
+.legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+.legend i.line { width: 14px; height: 2px; border-radius: 0; vertical-align: middle; }
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; color: var(--muted); font-weight: 500; font-size: 12px; padding: 8px 10px; border-bottom: 1px solid var(--axis); white-space: nowrap; position: sticky; top: 0; background: var(--surface); }
+td { padding: 9px 10px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr.click { cursor: pointer; } tr.click:hover td { background: var(--surface-2); }
+tr.selected td { background: var(--surface-2); box-shadow: inset 0 0 0 0 transparent; }
+tr.selected td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
+.scroll { max-height: 640px; overflow: auto; }
+.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; color: var(--ink-2); word-break: break-all; }
+.muted { color: var(--muted); } .nowrap { white-space: nowrap; }
+
+.badge { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.badge i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.chip { display: inline-block; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--ink-2); font-size: 12px; white-space: nowrap; }
+.meter { display: inline-block; width: 90px; height: 6px; border-radius: 3px; background: var(--grid); overflow: hidden; vertical-align: middle; margin-right: 8px; }
+.meter i { display: block; height: 100%; background: var(--series); border-radius: 3px; }
+
+.filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+.filters select, .filters input { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; }
+.filters input { min-width: 220px; }
+.filters .count { margin-left: auto; color: var(--muted); }
+
+.facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 12px 0 6px; }
+.facts div { background: var(--surface-2); border-radius: 8px; padding: 9px 11px; }
+.facts small { color: var(--muted); display: block; font-size: 12px; }
+.facts b { font-size: 16px; font-weight: 600; }
+
+/* ---- pipeline ---- */
+.dag { display: flex; align-items: stretch; gap: 0; }
+.dag .node { flex: 1; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; min-width: 0; }
+.dag .node b { display: block; font-size: 14px; margin: 6px 0 2px; text-transform: capitalize; }
+.dag .node small { color: var(--muted); display: block; }
+.dag .arrow { flex: none; width: 28px; display: grid; place-items: center; color: var(--muted); }
+.jobbar { display: flex; height: 8px; width: 180px; gap: 2px; }
+.jobbar i { display: block; height: 100%; border-radius: 2px; min-width: 2px; }
+
+/* ---- alerts ---- */
+.slack { display: flex; gap: 12px; }
+.slack .avatar { width: 38px; height: 38px; border-radius: 8px; background: var(--accent); color: #fff; font-weight: 700; display: grid; place-items: center; flex: none; }
+.slack .head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.slack .app { font-size: 10px; background: var(--axis); color: var(--ink-2); padding: 1px 4px; border-radius: 3px; }
+.slack .body { margin-top: 4px; color: var(--ink); line-height: 1.55; max-width: 78ch; }
+.slack .meta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.empty { text-align: center; padding: 60px 20px; color: var(--ink-2); }
+.empty .btn { width: auto; padding: 9px 18px; }
+
+@media (max-width: 1100px) { .cols-5, .cols-4 { grid-template-columns: repeat(2, 1fr); } .cols-3, .split { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { body { display: block; } aside { position: static; width: auto; height: auto; } main { padding: 18px 16px; } .dag { flex-direction: column; } .dag .arrow { transform: rotate(90deg); height: 22px; width: auto; } }
+</style>
+</head>
+<body>
+<aside>
+  <div class="brand"><div class="brand-mark">AW</div><div><b>Atelier Watch</b><span>Fashion anomaly detection</span></div></div>
+  <nav id="nav">
+    <a href="#overview"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>Overview</a>
+    <a href="#anomalies"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Anomalies</a>
+    <a href="#quality"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg>Data quality</a>
+    <a href="#pipeline"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="19" cy="18" r="2"/><path d="M7 12h5m0 0l5-5m-5 5l5 5"/></svg>Pipeline</a>
+    <a href="#alerts"><svg viewBox="0 0 24 24"><path d="M6 9a6 6 0 0112 0c0 6 2 7 2 7H4s2-1 2-7"/><path d="M10 20a2 2 0 004 0"/></svg>Alerts</a>
+  </nav>
+  <div class="run-box">
+    <small>Last run</small>
+    <div id="run-status">—</div>
+    <button class="btn" id="run-btn">Run pipeline</button>
+  </div>
+</aside>
+<main id="main"></main>
+<script src="app.js"></script>
+</body>
+</html>
