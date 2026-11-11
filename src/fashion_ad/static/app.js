@@ -38,7 +38,8 @@ const fmtMs = ms => ms >= 1000 ? (ms / 1000).toFixed(1) + ' s' : ms + ' ms';
 const badge = (color, label) => `<span class="badge"><i style="background:${color}"></i>${esc(label)}</span>`;
 const sevBadge = s => badge(SEV[s].color, SEV[s].label);
 const statusBadge = s => badge({ success: C.good, sent: C.good, failed: C.critical, running: C.warning }[s] || C.muted,
-  { success: 'Success', failed: 'Failed', running: 'Running', skipped: 'Skipped', sent: 'Sent to Slack', dry_run: 'Dry run (no webhook)' }[s] || s);
+  { success: 'Success', failed: 'Failed', running: 'Running', skipped: 'Skipped', sent: 'Sent to Slack', dry_run: 'Dry run (no webhook)', suppressed: 'No alert (below threshold)' }[s] || s);
+const mrkdwn = t => esc(t).replace(/[*][*](.+?)[*][*]/g, '<b>$1</b>').replace(/[*](.+?)[*]/g, '<b>$1</b>').replace(/\n/g, '<br>');
 
 async function api(path, opts) {
   const r = await fetch('/api/' + path, opts);
@@ -306,21 +307,79 @@ const views = {
   },
 
   async alerts() {
-    const list = await api('alerts');
-    const mrkdwn = t => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\*(.+?)\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
+    const { policy, items } = await api('alerts');
+    const SOURCE = { template: 'Template fallback (no LLM)', rule: 'Alert rule', test: 'Manual test' };
     main.innerHTML = page('Alerts', 'What the LLM wrote for each run, exactly as posted to Slack') + `
-      <div class="stack">${list.map(n => `<div class="card"><div class="slack">
+      <div class="stack">
+        <div class="card"><h3>Alert rule</h3>
+          <div style="display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap">
+            <div>Notify when the last <b>${policy.window_days} days</b> hold at least one anomaly of severity
+              ${sevBadge(policy.min_severity)} or above.
+              <div class="meta" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+                ${badge(policy.slack_configured ? C.good : C.muted, policy.slack_configured ? 'Slack webhook configured' : 'No Slack webhook: dry run')}
+                <span class="chip">${policy.llm_model ? 'LLM: ' + esc(policy.llm_model) : 'No LLM: template'}</span>
+                <span class="chip">ALERT_MIN_SEVERITY in .env</span></div></div>
+            <div><button class="btn" id="test-alert" style="width:auto;margin:0;padding:9px 16px">Send test alert</button></div>
+          </div>
+        </div>
+        ${items.map(n => `<div class="card"><div class="slack">
         <div class="avatar">AW</div>
         <div style="min-width:0"><div class="head"><b>Atelier Watch</b><span class="app">APP</span><span class="muted">${fmtTs(n.created_at)}</span></div>
           <div class="body">${mrkdwn(n.message)}</div>
           <div class="meta">${statusBadge(n.status)}<span class="chip">Run #${n.run_id}</span>
-            <span class="chip">${n.source === 'llm' ? 'Written by ' + esc(n.model) : 'Template fallback (no LLM)'}</span><span class="chip">#${esc(n.channel)}</span></div>
+            <span class="chip">${n.source === 'llm' ? 'Written by ' + esc(n.model) : SOURCE[n.source] || esc(n.source)}</span><span class="chip">#${esc(n.channel)}</span></div>
         </div></div></div>`).join('') || '<div class="card empty">No alerts yet.</div>'}</div>`;
+    $('#test-alert').onclick = async e => {
+      e.target.disabled = true;
+      await api('alerts/test', { method: 'POST' }).catch(() => {});
+      route();
+    };
+  },
+
+  async assistant() {
+    const SUGGESTIONS = ['What happened in the last two weeks?', 'Which store has the most anomalies?',
+      'Which data quality rules failed the most?', 'What should I investigate first?'];
+    main.innerHTML = page('Assistant', 'Ask about the latest run: anomalies, stores, categories, data quality') + `
+      <div class="card chat">
+        <div id="chat-log" class="chat-log" aria-live="polite"></div>
+        <div id="chat-suggest" class="chat-suggest">${SUGGESTIONS.map(q => `<button class="chip">${q}</button>`).join('')}</div>
+        <form id="chat-form" class="chat-form">
+          <input id="chat-input" placeholder="Ask a question about the data…" aria-label="Question" maxlength="2000" autocomplete="off">
+          <button class="btn" style="width:auto;margin:0;padding:9px 18px">Send</button>
+        </form>
+      </div>`;
+    const log = $('#chat-log'), input = $('#chat-input');
+    const bubble = m => `<div class="msg ${m.role}">${m.role === 'user' ? '' : '<div class="avatar">AW</div>'}
+      <div class="bubble${m.error ? ' muted' : ''}">${mrkdwn(m.content)}</div></div>`;
+    const draw = pending => {
+      log.innerHTML = chatHistory.map(bubble).join('') + (pending ? bubble({ role: 'assistant', content: 'Thinking…', error: true }) : '')
+        || '<p class="muted" style="text-align:center;margin:40px 0">The assistant answers from the latest run: KPIs, recent anomalies and failed quality rules.</p>';
+      $('#chat-suggest').style.display = chatHistory.length ? 'none' : '';  // suggestions only for an empty chat
+      log.scrollTop = log.scrollHeight;
+    };
+    const ask = async text => {
+      text = text.trim();
+      if (!text) return;
+      chatHistory.push({ role: 'user', content: text });
+      input.value = ''; input.disabled = true; draw(true);
+      try {
+        const messages = chatHistory.filter(m => !m.error).map(({ role, content }) => ({ role, content }));
+        const r = await api('chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages }) });
+        chatHistory.push({ role: 'assistant', content: r.reply });
+      } catch (e) {
+        chatHistory.push({ role: 'assistant', content: e.message, error: true });
+      }
+      input.disabled = false; draw(); input.focus();
+    };
+    $('#chat-form').onsubmit = e => { e.preventDefault(); ask(input.value); };
+    $('#chat-suggest').querySelectorAll('button').forEach(b => b.onclick = () => ask(b.textContent));
+    draw();
   },
 };
 
 /* ---------- shell ---------- */
 let selectedId = null;
+let chatHistory = [];  // kept while the page is open, so switching views does not lose the conversation
 async function route() {
   const name = location.hash.slice(1) in views ? location.hash.slice(1) : 'overview';
   document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('active', a.hash === '#' + name));

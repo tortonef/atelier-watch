@@ -4,9 +4,10 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 
-from . import db
-from .jobs import detect
+from . import config, db, llm
+from .jobs import detect, notify
 from .pipeline import run_pipeline
 
 app = FastAPI(title="Fashion Anomaly Detection")
@@ -106,7 +107,46 @@ def pipeline():
 
 @app.get("/api/alerts")
 def alerts():
-    return q("SELECT run_id, created_at, channel, status, source, model, message FROM notifications ORDER BY created_at DESC LIMIT 20")
+    return {
+        "policy": {"min_severity": notify.min_severity(), "window_days": notify.RECENT_DAYS,
+                   "slack_configured": bool(config.SLACK_WEBHOOK_URL),
+                   "llm_model": config.LLM_MODEL if llm.available() else None},
+        "items": q("""SELECT run_id, created_at, channel, status, source, model, message
+                      FROM notifications ORDER BY created_at DESC LIMIT 20"""),
+    }
+
+
+@app.post("/api/alerts/test")
+def test_alert():
+    """Check the Slack wiring without waiting for a real anomaly."""
+    run_id = latest_run()  # also opens the shared connection
+    message = "*Atelier Watch test alert*\nIf you can read this in Slack, the webhook is configured correctly."
+    status = notify.send_slack(message)
+    notify.record(_con.cursor(), run_id, status, "test", None, message)
+    return {"status": status}
+
+
+class ChatMessage(BaseModel):
+    role: str = Field(pattern="^(user|assistant)$")
+    content: str = Field(min_length=1, max_length=2000)
+
+
+class ChatRequest(BaseModel):
+    messages: list[ChatMessage] = Field(min_length=1, max_length=40)
+
+
+@app.post("/api/chat")
+def chat(req: ChatRequest):
+    if req.messages[-1].role != "user":
+        raise HTTPException(422, "The last message must come from the user")
+    if not llm.available():
+        raise HTTPException(503, "No LLM configured: set LLM_BASE_URL and LLM_MODEL in .env")
+    run_id = latest_run()  # also opens the shared connection
+    facts = notify.build_facts(_con.cursor(), run_id, limit=30)
+    reply = llm.answer(facts, [m.model_dump() for m in req.messages[-10:]])  # last 10 turns keep the prompt small
+    if reply is None:
+        raise HTTPException(502, "The LLM did not answer. Is the model running?")
+    return {"reply": reply, "model": config.LLM_MODEL}
 
 
 @app.post("/api/run")

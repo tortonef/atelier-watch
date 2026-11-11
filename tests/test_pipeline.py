@@ -67,3 +67,21 @@ def test_alert_falls_back_to_template_and_dry_run(run):
         "SELECT status, source, message FROM notifications WHERE run_id = ?", [run_id]).fetchone()
     assert (status, source) == ("dry_run", "template")
     assert "anomalies detected" in message
+
+
+def test_assistant_context_lists_recent_anomalies(run):
+    from fashion_ad.jobs import notify
+    con, run_id, _ = run
+    facts = notify.build_facts(con, run_id, limit=30)
+    assert 6 < len(facts["recent_anomalies"]) <= 30
+    assert facts["data_quality"]["rules_failed"] > 0 and facts["by_signal"]
+
+
+def test_alert_rule_suppresses_when_nothing_is_severe_enough(run):  # keep last: it rewrites severities
+    from fashion_ad.jobs import notify
+    con, run_id, _ = run
+    con.execute("UPDATE anomalies SET severity = 'low' WHERE run_id = ?", [run_id])
+    assert notify.run(con, run_id) == (0, 0)
+    status, source = con.execute(
+        "SELECT status, source FROM notifications WHERE run_id = ? ORDER BY created_at DESC LIMIT 1", [run_id]).fetchone()
+    assert (status, source) == ("suppressed", "rule")

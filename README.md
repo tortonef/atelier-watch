@@ -2,7 +2,7 @@
 
 An end-to-end anomaly detection platform for fashion retail data: a custom ETL with a
 quality gate, two complementary detectors, an LLM that turns the findings into a Slack
-alert, and a dashboard to explore everything.
+alert and answers questions about the run, and a dashboard to explore everything.
 
 ![Overview](docs/screenshots/overview.png)
 
@@ -34,7 +34,8 @@ flowchart LR
 | ETL | 5 Python jobs run in order | every job logs status, duration and rows in/out to `job_runs`; a failure skips the rest |
 | Data quality | 20 declarative SQL rules | `error` rows are quarantined with their payload, `warn` rows pass through |
 | Detection | robust z-score + Isolation Forest | scored against seeded ground truth |
-| Alerting | any OpenAI-compatible LLM (Groq, Ollama) → Slack webhook | template fallback and dry run when not configured |
+| Alerting | alert rule → any OpenAI-compatible LLM (Groq, Ollama) → Slack webhook | template fallback and dry run when not configured |
+| Assistant | same LLM, grounded on the latest run | answers from KPIs, recent anomalies and failed rules only |
 | UI | FastAPI + vanilla JS + ECharts | no build step |
 
 ## Quick start
@@ -91,10 +92,20 @@ also lifts the average discount of each category that day.
 
 ![Pipeline](docs/screenshots/pipeline.png)
 
-The `notify` job sends the most severe anomalies of the last 14 days plus the data quality
-summary to the LLM and posts the result to Slack.
+The `notify` job applies the **alert rule** first: it only notifies when the last 14 days
+hold at least one anomaly at or above `ALERT_MIN_SEVERITY` (default `high`); otherwise the
+run is recorded as "no alert". When the rule fires, the most severe recent anomalies plus
+the data quality summary go to the LLM and the result is posted to Slack. The Alerts view
+shows the rule, every message, and a "Send test alert" button to check the webhook.
 
 ![Alerts](docs/screenshots/alerts.png)
+
+## Assistant
+
+The Assistant view is a chat grounded on the latest run. Each question is sent to the LLM
+together with a compact JSON context (totals by severity, signal and entity, the top recent
+anomalies, the failed quality rules), and the model is told to answer from that context
+only. It needs an LLM configured in `.env`; there is no template fallback for chat.
 
 ## Tests
 
@@ -103,11 +114,12 @@ summary to the LLM and posts the result to Slack.
 ```
 
 One end-to-end test module: the rules catch exactly the seeded dirty rows, nothing dirty
-reaches silver, the detectors meet a minimum recall and precision, and the alert falls back
-to the template without network access.
+reaches silver, the detectors meet a minimum recall and precision, the alert falls back
+to the template without network access, and the alert rule suppresses low-severity runs.
 
 ## Limitations
 
 - The data is synthetic and the anomalies are large by design; thresholds would need tuning on real data.
 - Each run reprocesses the full history (no incremental loads) and there is no scheduler.
 - The dashboard has no authentication and binds to localhost only.
+- The assistant only knows what is in its context (latest run, top 30 recent anomalies); it cannot query the database.

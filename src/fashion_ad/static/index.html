@@ -103,6 +103,18 @@ tr.selected td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
 .slack .app { font-size: 10px; background: var(--axis); color: var(--ink-2); padding: 1px 4px; border-radius: 3px; }
 .slack .body { margin-top: 4px; color: var(--ink); line-height: 1.55; max-width: 78ch; }
 .slack .meta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+/* ---- assistant ---- */
+.chat { display: flex; flex-direction: column; height: calc(100vh - 150px); min-height: 420px; }
+.chat-log { flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 14px; padding: 4px 4px 14px; }
+.msg { display: flex; gap: 10px; max-width: 82%; }
+.msg.user { align-self: flex-end; }
+.msg .avatar { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); color: #fff; font-weight: 700; font-size: 12px; display: grid; place-items: center; flex: none; }
+.bubble { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; line-height: 1.55; overflow-wrap: anywhere; }
+.msg.user .bubble { background: #2a2330; border-color: rgba(213,81,129,.35); }
+.chat-suggest { display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 0; }
+.chat-suggest .chip { background: none; cursor: pointer; padding: 5px 12px; } .chat-suggest .chip:hover { background: var(--surface-2); color: var(--ink); }
+.chat-form { display: flex; gap: 10px; }
+.chat-form input { flex: 1; background: var(--page); border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; min-width: 0; }
 .empty { text-align: center; padding: 60px 20px; color: var(--ink-2); }
 .empty .btn { width: auto; padding: 9px 18px; }
 
@@ -119,6 +131,7 @@ tr.selected td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
     <a href="#quality"><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg>Data quality</a>
     <a href="#pipeline"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="19" cy="18" r="2"/><path d="M7 12h5m0 0l5-5m-5 5l5 5"/></svg>Pipeline</a>
     <a href="#alerts"><svg viewBox="0 0 24 24"><path d="M6 9a6 6 0 0112 0c0 6 2 7 2 7H4s2-1 2-7"/><path d="M10 20a2 2 0 004 0"/></svg>Alerts</a>
+    <a href="#assistant"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/></svg>Assistant</a>
   </nav>
   <div class="run-box">
     <small>Last run</small>

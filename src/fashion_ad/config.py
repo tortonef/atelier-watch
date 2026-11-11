@@ -21,3 +21,4 @@ LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
 LLM_MODEL = os.environ.get("LLM_MODEL", "")
 LLM_REASONING_EFFORT = os.environ.get("LLM_REASONING_EFFORT", "")  # e.g. "none" for local thinking models
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL", "")
+ALERT_MIN_SEVERITY = os.environ.get("ALERT_MIN_SEVERITY", "high")  # low | medium | high | critical
